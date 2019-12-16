@@ -1,0 +1,6 @@
+﻿  MonteCarloSimulationIterative.cpp
+C:\Users\Vlad\source\repos\MonteCarloSimulation\MonteCarloSimulationIterative\MonteCarloSimulationIterative.cpp(11,15): warning C4244: 'argument': conversion from 'time_t' to 'unsigned int', possible loss of data
+C:\Users\Vlad\source\repos\MonteCarloSimulation\MonteCarloSimulationIterative\MonteCarloSimulationIterative.cpp(20,44): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+C:\Users\Vlad\source\repos\MonteCarloSimulation\MonteCarloSimulationIterative\MonteCarloSimulationIterative.cpp(27,41): warning C4244: 'argument': conversion from 'double' to 'int', possible loss of data
+C:\Users\Vlad\source\repos\MonteCarloSimulation\MonteCarloSimulationIterative\MonteCarloSimulationIterative.cpp(30,41): warning C4244: 'argument': conversion from 'double' to 'int', possible loss of data
+  MonteCarloSimulationIterative.vcxproj -> C:\Users\Vlad\source\repos\MonteCarloSimulation\x64\Debug\MonteCarloSimulationIterative.exe
