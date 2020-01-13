@@ -19,7 +19,7 @@ float getPiValue(int numSamplesInCircle) {
     return 4.0 * (float)numSamplesInCircle / (NUM_SAMPLES_PER_THREAD * NUM_THREADS_PER_BLOCK * NUM_BLOCKS * KERNEL_ITERATIONS);
 }
 
-cudaError_t countSamplesInCircleWithCuda(int iterationNo, int* managed_sampleCountPerBlock);
+cudaError_t countSamplesInCircleWithCuda(int iterationNo, int* host_sampleCountPerBlock);
 
 __global__ void countSamplesInCircleKernel(int* device_sampleCountPerBlock, curandState* states)
 {
@@ -56,22 +56,21 @@ int main()
 {
     std::clock_t c_start = std::clock();
 
-    int* managed_sampleCountPerBlock = new int[NUM_BLOCKS];
-    cudaMallocManaged(&managed_sampleCountPerBlock, NUM_BLOCKS * sizeof(int));
+    int* host_sampleCountPerBlock = new int[NUM_BLOCKS];
     int numSamplesInCircle = 0;
     cudaError_t cudaStatus;
     int memorySize = int(NUM_SAMPLES_PER_THREAD * NUM_THREADS_PER_BLOCK * NUM_BLOCKS) / 1024 / 1024 * 4;
 
     for (int i = 0; i < KERNEL_ITERATIONS; ++i) {
         // Call kernel    
-        cudaStatus = countSamplesInCircleWithCuda(i, managed_sampleCountPerBlock);
+        cudaStatus = countSamplesInCircleWithCuda(i, host_sampleCountPerBlock);
         if (cudaStatus != cudaSuccess) {
             fprintf(stderr, "countSamplesInCircleWithCuda failed!");
             return 1;
         }
 
         for (int i = 0; i < NUM_BLOCKS; ++i) {
-            numSamplesInCircle += managed_sampleCountPerBlock[i];
+            numSamplesInCircle += host_sampleCountPerBlock[i];
         }
 
         printf("Device memory used: %dMb\n", memorySize);
@@ -94,12 +93,11 @@ int main()
     printf("Number of samples: %d\n", int(NUM_SAMPLES_PER_THREAD * NUM_THREADS_PER_BLOCK * NUM_BLOCKS * KERNEL_ITERATIONS));
     printf("pi = %f\n", piValue);
 
-    cudaFree(managed_sampleCountPerBlock);
     return 0;
 }
 
 // Helper function for using CUDA to add vectors in parallel.
-cudaError_t countSamplesInCircleWithCuda(int iterationNo, int* managed_sampleCountPerBlock)
+cudaError_t countSamplesInCircleWithCuda(int iterationNo, int* host_sampleCountPerBlock)
 {
     cudaError_t cudaStatus;
     cudaEvent_t start1, stop1, start2, stop2, start3, stop3;
@@ -121,12 +119,18 @@ cudaError_t countSamplesInCircleWithCuda(int iterationNo, int* managed_sampleCou
     float elapsedTime;
 
     cudaEventRecord(start2, 0);
-
+    printf("\nDevice malloc sampleCountPerBlock...\n");
+    int* device_sampleCountPerBlock;
+    cudaStatus = cudaMalloc(&device_sampleCountPerBlock, COUNT_SIZE);
+    if (cudaStatus != cudaSuccess) {
+        fprintf(stderr, "cudaMalloc failed! (device_sampleCountPerBlock)\n");
+        goto Error;
+    }
     curandState* devStates;
     cudaMalloc((void**)&devStates, NUM_BLOCKS * NUM_THREADS_PER_BLOCK * sizeof(curandState));
     // Launch a kernel on the GPU with one thread for each element.
     printf("Launching kernel (%d)...\n", iterationNo);
-    countSamplesInCircleKernel << <NUM_BLOCKS, NUM_THREADS_PER_BLOCK >> > (managed_sampleCountPerBlock, devStates);
+    countSamplesInCircleKernel << <NUM_BLOCKS, NUM_THREADS_PER_BLOCK >> > (device_sampleCountPerBlock, devStates);
 
     // Check for any errors launching the kernel
     cudaStatus = cudaGetLastError();
@@ -148,6 +152,20 @@ cudaError_t countSamplesInCircleWithCuda(int iterationNo, int* managed_sampleCou
     cudaEventElapsedTime(&elapsedTime, start2, stop2);
     printf("Kernel execution time: %f\n", elapsedTime);
 
+    cudaEventRecord(start3, 0);
+    printf("Copying sampleCountPerBlock from device to host...\n");
+    cudaStatus = cudaMemcpy(host_sampleCountPerBlock, device_sampleCountPerBlock, COUNT_SIZE, cudaMemcpyDeviceToHost);
+    if (cudaStatus != cudaSuccess) {
+        fprintf(stderr, "cudaMemcpy failed! (device_sampleCountPerBlock)\n");
+        goto Error;
+    }
+    cudaEventRecord(stop3, 0);
+    cudaEventSynchronize(stop3);
+    cudaEventElapsedTime(&elapsedTime, start3, stop3);
+    printf("Copy from --graphics card-- to --proc-- time: %f\n", elapsedTime);
+
 Error:
+    cudaFree(device_sampleCountPerBlock);
+
     return cudaStatus;
 }
